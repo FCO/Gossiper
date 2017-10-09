@@ -6,5 +6,6 @@ class News does JSON::Class {
     has Str $.verb where <create modify delete add remove>.one;
     has     %.params;
 
-    method WHICH {"News|$!id"}
+    multi method WHICH(::?CLASS:D:) {"News|" ~ $!id}
+    multi method WHICH(::?CLASS:U:) {"News|[[UNDEFINED]]"}
 }

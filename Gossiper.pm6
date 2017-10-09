@@ -50,7 +50,7 @@ method start {
                     }
                 }
             }
-            whenever $!supply.grep: { .noun ~~ "node" } -> News $news {
+            whenever $!supply.grep: { .noun ~~ "node" } -> News:D $news {
                 given $news.verb {
                     when "add" {
                         $.add-node(|$news.params)
@@ -59,10 +59,10 @@ method start {
             }
             whenever Supply.interval: $!interval / 1000, :delay(rand * $!interval / 1000) {
                 if $!nodes.elems {
-                    with $!news.pick -> News $news {
+                    with $!news.pick -> News:D $news {
                         note "Sending: ", $news;
                         $!news{ $news } *= .999;
-                        $!nodes.pick.send: $news.to-json;
+                        $!nodes.pick.send: $news.to-json: :skip-null;
                     }
                 }
             }
