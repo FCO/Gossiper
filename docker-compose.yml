@@ -1,0 +1,8 @@
+version: '3'
+services:
+  test1:
+    build: .
+    command: perl6 -I. test1.p6
+  test2:
+    build: .
+    command: perl6 -I. test2.p6
