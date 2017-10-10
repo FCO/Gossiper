@@ -1,6 +1,7 @@
-unit class Address;
+use JSON::Class;
+unit class Address does JSON::Class;
 
-has IO::Socket::Async $.sock .= udp;
+has IO::Socket::Async $!sock .= udp;
 has Str               $.host  = "localhost";
 has UInt              $.port  = 9999;
 

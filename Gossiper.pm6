@@ -2,6 +2,7 @@
 unit class Gossiper;
 use Address;
 use News;
+use Msg;
 
 has Address           $.advertise handles (:advertise-host<host>, :advertise-port<port>);
 has Address           $.address   handles <host port>;
@@ -16,7 +17,10 @@ has SetHash           $!old-news       .= new;
 has Supply            $.supply;
 
 method new(*@nodes, :$host = "localhost", :$port = 9999, :$advertise-host = $host, :$advertise-port = $port) {
-    ::?CLASS.bless: :address(Address.new: :$host, :$port), :$advertise-host, :$advertise-port, :nodes(@nodes.SetHash)
+    ::?CLASS.bless:
+        :address(Address.new: :$host, :$port),
+        :advertise(Address.new: :host($advertise-host), :port($advertise-port)),
+        :nodes(@nodes.SetHash)
 }
 
 multi method add-node(Str() :$host, UInt() :$port) {
@@ -39,10 +43,12 @@ multi method add-news(News $news) {
 method start {
     $!running = start {
         $!socket .= bind-udp: $.host, $.port;
+        $.add-news(:verb<add>, :noun<node>, :params{:host($!advertise.host), :port($!advertise.port)});
         react {
             $!supply = supply {
                 whenever $!socket.Supply.grep: *.chars > 0 -> $news {
-                    my News $n .= from-json: $news;
+                    my Msg  $m .= from-json: $news;
+                    my News $n  = $m.news;
                     if not $!news{ $n }:exists and not $!old-news{ $n } {
                         note "received: ", $n.WHICH;
                         $.add-news( $n );
@@ -62,7 +68,9 @@ method start {
                     with $!news.pick -> News $news {
                         note "Sending: ", $news;
                         $!news{ $news } *= .999;
-                        $!nodes.pick.send: $news.to-json;
+                        my $node = $!nodes.pick;
+                        my Msg $msg .= new: :to($node), :from($!advertise), :$news;
+                        $node.send: $msg.to-json;
                     }
                 }
             }
