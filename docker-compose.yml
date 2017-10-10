@@ -6,3 +6,9 @@ services:
   test2:
     build: .
     command: perl6 -I. test2.p6
+  test3:
+    build: .
+    command: perl6 -I. test2.p6
+  test4:
+    build: .
+    command: perl6 -I. test2.p6
