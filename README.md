@@ -1,9 +1,3 @@
 # Gossiper
 
-In a terminal:
-
-`6pm exec-file -- -I. test1.p6`
-
-In another terminal:
-
-`6pm exec-file -- -I. test2.p6`
+`docker-compose up --build --scale node=5 --scale center=2`
