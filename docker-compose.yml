@@ -1,5 +1,17 @@
 version: '3'
 services:
-  test:
+  center:
     build: .
+    command: perl6 -I. test1.p6
+  node1:
+    build: .
+    environment:
+      HOST: node1
+      PORT: 9999
+    command: perl6 -I. test3.p6
+  node2:
+    build: .
+    environment:
+      HOST: node2
+      PORT: 9999
     command: perl6 -I. test3.p6

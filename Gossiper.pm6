@@ -50,7 +50,7 @@ method start {
                     my Msg  $m .= from-json: $news;
                     my News $n  = $m.news;
                     if not $!news{ $n }:exists and not $!old-news{ $n } {
-                        note "received: ", $n.WHICH;
+                        #note "received: ", $n.WHICH;
                         $.add-news( $n );
                         emit $n
                     }
@@ -66,7 +66,7 @@ method start {
             whenever Supply.interval: $!interval / 1000, :delay(rand * $!interval / 1000) {
                 if $!nodes.elems {
                     with $!news.pick -> News $news {
-                        note "Sending: ", $news;
+                        #note "Sending: ", $news;
                         $!news{ $news } *= .999;
                         my $node = $!nodes.pick;
                         my Msg $msg .= new: :to($node), :from($!advertise), :$news;

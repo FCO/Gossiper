@@ -1,5 +1,9 @@
 use Gossiper;
 
-my Gossiper $g .= new: :host<localhost>, :9999port;
+my Gossiper $g .= new: :host<center>, :9999port;
+
+start react whenever Supply.interval: 5 {
+	say $g.nodes
+}
 
 await $g.start

@@ -8,3 +8,6 @@ has UInt              $.port  = 9999;
 method send($news)    {
     $!sock.print-to: $!host, $!port, $news.Str
 }
+
+multi method WHICH(::?CLASS:D:) {"Address|$!host:$!port"}
+multi method WHICH(::?CLASS:U:) {"Address|[[UNDEFINED]]"}

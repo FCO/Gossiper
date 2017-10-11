@@ -1,6 +1,10 @@
 use Gossiper;
 
-my Gossiper $g .= new: :host<test>, :9999port;
-$g.add-node: :host<test>, :9999port;
+my Gossiper $g .= new: :host(%*ENV<HOST>), :port(%*ENV<PORT>.Int);
+$g.add-node: :host<center>, :9999port;
+
+start react whenever Supply.interval: 5 {
+	say $g.nodes
+}
 
 await $g.start
