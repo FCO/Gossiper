@@ -1,9 +1,18 @@
+use v6.d.PREVIEW;
 use Gossiper;
 
 my Gossiper $g .= new: :host<center>, :9999port;
 
-start react whenever Supply.interval: 5 {
-	say $g.nodes
+react {
+	whenever $g.start {
+		done
+	}
+	whenever Supply.interval: 5 {
+		say $g.nodes
+	}
+	whenever Promise.in: 20 + rand * 10 {
+		$g.stop
+	}
 }
 
-await $g.start
+note "=====================================>     SAIU!!!!"

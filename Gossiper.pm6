@@ -10,7 +10,7 @@ has IO::Socket::Async $.socket;
 has SetHash           $.nodes;
 has UInt              $.interval        = 50;
 has UInt              $.initial-weight  = 50;
-has Promise           $!running;
+has Promise           $!done;
 has BagHash           $!news           .= new;
 has SetHash           $!old-news       .= new;
 
@@ -31,6 +31,14 @@ multi method add-node(Address $node) {
     $!nodes{ $node } = True
 }
 
+multi method remove-node(Str() :$host, UInt() :$port) {
+    $.remove-node(Address.new: :$host, :$port)
+}
+
+multi method remove-node(Address $node) {
+    $!nodes{ $node } = False
+}
+
 multi method add-news(Str :$noun, Str :$verb where <create modify delete add remove>.one, :%params) {
     $.add-news(News.new: :$noun, :$verb, :%params)
 }
@@ -40,11 +48,19 @@ multi method add-news(News $news) {
     $!old-news{ $news } = True;
 }
 
+method stop {
+    $!done.keep
+}
+
 method start {
-    $!running = start {
-        $!socket .= bind-udp: $.host, $.port;
-        $.add-news(:verb<add>, :noun<node>, :params{:host($!advertise.host), :port($!advertise.port)});
+    $!done     .= new;
+    $!socket   .= bind-udp: $.host, $.port;
+    $.add-news(:verb<add>, :noun<node>, :params{:host($!advertise.host), :port($!advertise.port)});
+    start {
         react {
+            whenever $!done {
+                done
+            }
             $!supply = supply {
                 whenever $!socket.Supply.grep: *.chars > 0 -> $news {
                     my Msg  $m .= from-json: $news;
@@ -61,6 +77,9 @@ method start {
                     when "add" {
                         $.add-node(|$news.params)
                     }
+                    when "remove" {
+                        $.remove-node(|$news.params)
+                    }
                 }
             }
             whenever Supply.interval: $!interval / 1000, :delay(rand * $!interval / 1000) {
@@ -74,6 +93,19 @@ method start {
                     }
                 }
             }
+        }
+        for $!nodes.keys -> $node {
+            my Msg $msg .= new:
+                :to($node),
+                :from($!advertise),
+                :news(
+                    News.new:
+                        :verb<remove>,
+                        :noun<node>,
+                        :params{:host($!advertise.host), :port($!advertise.port)}
+                )
+            ;
+            $node.send: $msg.to-json;
         }
     }
 }
