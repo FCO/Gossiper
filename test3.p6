@@ -1,8 +1,9 @@
 use Gossiper;
+sleep 5;
 
-my $host = q:x{ip addr | grep global | perl -nae 'print((split("/", $F[1]))[0])'};
-my Gossiper $g .= new: :$host, :port(%*ENV<PORT>.Int);
-$g.add-node: :host<center>, :9999port;
+my $host = %*ENV<HOST> || q:x{ip addr | grep global | perl -nae 'print((split("/", $F[1]))[0])'};
+my Gossiper $g .= new: :$host, :8889udp-port, :8888tcp-port;
+$g.add-node: :host<center>, :9999udp-port, :9998tcp-port;
 
 react {
 	whenever $g.start {
@@ -11,9 +12,9 @@ react {
 	whenever Supply.interval: 5 {
 		say $g.nodes
 	}
-	whenever Promise.in: 20 + rand * 10 {
-		$g.stop
-	}
+	#whenever Promise.in: 20 + rand * 10 {
+	#	$g.stop
+	#}
 }
 
-note "=====================================>     SAIU!!!!"
+note "=====================================>     SAIU!!!!";

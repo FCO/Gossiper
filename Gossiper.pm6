@@ -1,41 +1,61 @@
 # vim: noai:ts=4:sw=4:expandtab
 unit class Gossiper;
-use Address;
+use JSON::Class;
+use Node;
 use News;
 use Msg;
 
-has Address           $.advertise handles (:advertise-host<host>, :advertise-port<port>);
-has Address           $.address   handles <host port>;
-has IO::Socket::Async $.socket;
+multi to-json(JSON::Class:D $obj, |) {$obj.to-json}
+multi to-json(JSON::Class:U $obj, |) {""}
+
+has Node              $.address   handles <host advertise-host udp-port tcp-port udp-supply listen>;
 has SetHash           $.nodes;
-has UInt              $.interval        = 50;
-has UInt              $.initial-weight  = 50;
+has UInt              $.interval                = 50;
+has UInt              $.initial-weight-by-node  = 5;
 has Promise           $!done;
-has BagHash           $!news           .= new;
-has SetHash           $!old-news       .= new;
+has BagHash           $!news                   .= new;
+has SetHash           $!old-news               .= new;
 
 has Supply            $.supply;
 
-method new(*@nodes, :$host = "localhost", :$port = 9999, :$advertise-host = $host, :$advertise-port = $port) {
+sub node-for-params(
+    Str  :$host?,
+    Str  :$advertise-host?,
+    UInt :$udp-port?,
+    UInt :$tcp-port?,
+    UInt :$advertise-udp-port?,
+    UInt :$advertise-tcp-port?,
+) {
+    my %params;
+    %params<host>              = $_ with $host;
+    %params<advertise-host>    = $_ with $host;
+    %params<udp-port>          = $_ with $udp-port;
+    %params<tcp-port>          = $_ with $tcp-port;
+    %params<adverize-udp-port> = $_ with $advertise-udp-port;
+    %params<adverize-tcp-port> = $_ with $advertise-tcp-port;
+
+    Node.new: |%params
+}
+
+method new(*@nodes, *%params) {
     ::?CLASS.bless:
-        :address(Address.new: :$host, :$port),
-        :advertise(Address.new: :host($advertise-host), :port($advertise-port)),
+        :address(node-for-params |%params),
         :nodes(@nodes.SetHash)
 }
 
-multi method add-node(Str() :$host, UInt() :$port) {
-    $.add-node(Address.new: :$host, :$port)
+multi method add-node(*%params) {
+    $.add-node(node-for-params |%params)
 }
 
-multi method add-node(Address $node) {
+multi method add-node(Node $node) {
     $!nodes{ $node } = True
 }
 
-multi method remove-node(Str() :$host, UInt() :$port) {
-    $.remove-node(Address.new: :$host, :$port)
+multi method remove-node(*%params) {
+    $.remove-node(node-for-params |%params)
 }
 
-multi method remove-node(Address $node) {
+multi method remove-node(Node $node) {
     $!nodes{ $node } = False
 }
 
@@ -44,7 +64,7 @@ multi method add-news(Str :$noun, Str :$verb where <create modify delete add rem
 }
 
 multi method add-news(News $news) {
-    $!news{ $news } = $!initial-weight;
+    $!news{ $news } = $!initial-weight-by-node * $!nodes.elems;
     $!old-news{ $news } = True;
 }
 
@@ -54,19 +74,49 @@ method stop {
 
 method start {
     $!done     .= new;
-    $!socket   .= bind-udp: $.host, $.port;
-    $.add-news(:verb<add>, :noun<node>, :params{:host($!advertise.host), :port($!advertise.port)});
+    $.add-news(:verb<add>, :noun<node>, :params($!address.Hash));
+    my Node $first-node = $!nodes.pick;
     start {
+        use JSON::Pretty;
+        #CATCH {
+        #    default {
+        #        say "Deu ruim! $_";
+        #    }
+        #}
         react {
             whenever $!done {
                 done
             }
+            whenever $.listen -> $conn {
+                #note "conn: $conn";
+                #note $!old-news.keys.Array;
+                my $str-old-news = "[ {$!old-news.keys>>.to-json.join(", ")} ]\n";
+                note "str-old-news: $str-old-news";
+                $conn.print: $str-old-news;
+                $conn.close;
+            }
             $!supply = supply {
-                whenever $!socket.Supply.grep: *.chars > 0 -> $news {
+                if $first-node {
+                    whenever $first-node.connect -> $prom {
+                        note "prom: $prom";
+                        whenever $prom.Supply -> $v {
+                            note "tcp: $v";
+                            with $v {
+                                for |.&from-json -> $news {
+                                    my News $n .= new: |$news;
+                                    note "news: {$n}";
+                                    $.add-news($n);
+                                    emit $n
+                                }
+                            }
+                        }
+                    }
+                }
+                whenever $.udp-supply -> $news {
                     my Msg  $m .= from-json: $news;
                     my News $n  = $m.news;
                     if not $!news{ $n }:exists and not $!old-news{ $n } {
-                        #note "received: ", $n.WHICH;
+                        note "received: ", $n.WHICH;
                         $.add-news( $n );
                         emit $n
                     }
@@ -83,29 +133,31 @@ method start {
                 }
             }
             whenever Supply.interval: $!interval / 1000, :delay(rand * $!interval / 1000) {
-                if $!nodes.elems {
+                with $!nodes.pick -> $node {
                     with $!news.pick -> News $news {
-                        #note "Sending: ", $news;
-                        $!news{ $news } *= .999;
-                        my $node = $!nodes.pick;
-                        my Msg $msg .= new: :to($node), :from($!advertise), :$news;
+                        note "Sending: ", $news;
+                        $!news{ $news } *= .99999;
+                        my Msg $msg .= new: :to($node), :from($!address), :$news;
                         $node.send: $msg.to-json;
                     }
                 }
             }
         }
-        for $!nodes.keys -> $node {
-            my Msg $msg .= new:
-                :to($node),
-                :from($!advertise),
-                :news(
-                    News.new:
-                        :verb<remove>,
-                        :noun<node>,
-                        :params{:host($!advertise.host), :port($!advertise.port)}
-                )
-            ;
-            $node.send: $msg.to-json;
+        LEAVE {
+            note "quiting";
+            for $!nodes.keys -> $node {
+                my Msg $msg .= new:
+                    :to($node),
+                    :from($!address),
+                    :news(
+                        News.new:
+                            :verb<remove>,
+                            :noun<node>,
+                            :params($!address.Hash)
+                    )
+                ;
+                $node.send: $msg.to-json;
+            }
         }
     }
 }

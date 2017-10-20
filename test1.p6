@@ -1,7 +1,7 @@
 use v6.d.PREVIEW;
 use Gossiper;
 
-my Gossiper $g .= new: :host<center>, :9999port;
+my Gossiper $g .= new: :host<center>, :9999udp-port, :9998tcp-port;
 
 react {
 	whenever $g.start {
@@ -10,9 +10,9 @@ react {
 	whenever Supply.interval: 5 {
 		say $g.nodes
 	}
-	whenever Promise.in: 20 + rand * 10 {
-		$g.stop
-	}
+	#whenever Promise.in: 200 + rand * 10 {
+	#	$g.stop
+	#}
 }
 
 note "=====================================>     SAIU!!!!"
