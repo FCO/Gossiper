@@ -1,6 +1,8 @@
 # vim: noai:ts=4:sw=4:expandtab
+use UseIdToWhich;
 use JSON::Class;
-unit class Node does JSON::Class;
+use ToHash;
+unit class Node does JSON::Class does ToHash does UseIdToWhich;
 
 has Str               $.host                = "0.0.0.0";
 has Str               $.advertise-host      = $!host;
@@ -26,7 +28,3 @@ method connect {
 method listen {
 	IO::Socket::Async.listen($!host, $!tcp-port)
 }
-
-multi method WHICH(::?CLASS:D:) {.perl}
-multi method WHICH(::?CLASS:U:) {.perl}
-method Hash(--> Hash()) {self.^attributes.grep(*.has_accessor).map: {.name.substr(2) => .get_value: self}}

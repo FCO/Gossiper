@@ -1,10 +1,8 @@
+use UseIdToWhich;
 use JSON::Class;
-unit class News does JSON::Class;
-use UUID;
-has Str $.id = ~UUID.new: :4version;
+use ToHash;
+unit class News does JSON::Class does ToHash does UseIdToWhich;
 has Str $.noun;
 has Str $.verb where <create modify delete add remove>.one;
 has     %.params;
 
-multi method WHICH(::?CLASS:D:) {"News|$!id"}
-multi method WHICH(::?CLASS:U:) {"News|[[UNDEFINED]]"}
