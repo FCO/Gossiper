@@ -85,7 +85,7 @@ multi method remove-node(Node $node) {
 }
 
 method pick-node {
-    my $node;
+    my Node $node;
     $!node-lock.lock;
     if $!nodes.elems {
         $node = $!nodes.pick;
