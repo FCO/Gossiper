@@ -170,7 +170,7 @@ method start {
                     }
                 }
             }
-            whenever $!supply.grep: { .subject ~~ "node" } -> News $news {
+            whenever $!supply.grep: { .DEFINITE and .subject ~~ "node" } -> News $news {
                 #note "new news!!! {$news.perl}";
                 given $news.action {
                     when "add" {

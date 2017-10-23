@@ -2,9 +2,9 @@ version: '3'
 services:
   center:
     build: .
-    command: perl6 -I. test1.p6
+    command: perl6 -I. test3.p6 --host=center --udp-port=9999 --tcp-port=9998
   node:
     build: .
     environment:
       PORT: 9999
-    command: perl6 -I. test3.p6
+    command: perl6 -I. test3.p6 --delay=5 --udp-port=9999 --tcp-port=9998 center:9998
