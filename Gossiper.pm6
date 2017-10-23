@@ -16,6 +16,7 @@ has Promise           $!done;
 has BagHash           $!news                   .= new;
 has SetHash           $!old-news               .= new;
 has SetHash           $!seed                   .= new;
+has Lock              $!node-lock              .= new;
 
 has Supply            $.supply;
 
@@ -29,6 +30,7 @@ sub node-for-params(
     UInt :$advertise-tcp-port?,
 ) {
     my %params;
+    %params<id>                = $_ with $id;
     %params<host>              = $_ with $host;
     %params<advertise-host>    = $_ with $host;
     %params<udp-port>          = $_ with $udp-port;
@@ -66,8 +68,10 @@ multi method add-node(*%params) {
 }
 
 multi method add-node(Node $node) {
+    $!node-lock.lock;
     #note "new node => {$node.perl}";
-    $!nodes{ $node } = True
+    $!nodes{ $node } = True;
+    $!node-lock.unlock;
 }
 
 multi method remove-node(*%params) {
@@ -75,16 +79,35 @@ multi method remove-node(*%params) {
 }
 
 multi method remove-node(Node $node) {
-    $!nodes{ $node } = False
+    $!node-lock.lock;
+    $!nodes{ $node } = False;
+    $!node-lock.unlock;
 }
 
-multi method add-news(Str :$noun, Str :$verb where <create modify delete add remove>.one, :%params) {
-    my $news = News.new: :$noun, :$verb, :%params;
+method pick-node {
+    my $node;
+    $!node-lock.lock;
+    if $!nodes.elems {
+        $node = $!nodes.pick;
+    }
+    $!node-lock.unlock;
+    $node
+}
+
+multi method add-news(Str :$id, Str :$subject, Str :$action where <create modify delete add remove>.one, :%params) {
+    my %pars;
+    %pars<id>         = $_ with $id;
+    %pars<subject>    = $_ with $subject;
+    %pars<action>     = $_ with $action;
+    %pars<params>     = %params;
+    my $news = News.new: |%pars;
     $.add-news($news)
 }
 
 multi method add-news(News $news) {
+    $!node-lock.lock;
     $!news{ $news } = $!initial-weight-by-node * ($!nodes.elems + 1);
+    $!node-lock.unlock;
     $!old-news{ $news } = True;
 }
 
@@ -94,7 +117,8 @@ method stop {
 
 method start {
     $!done     .= new;
-    $.add-news(:verb<add>, :noun<node>, :params($!address.Hash));
+    $.add-news(:action<add>, :subject<node>, :params($!address.Hash));
+    note "====> {$!address.perl}";
     my Node $seed = $!seed.pick;
     start {
         use JSON::Pretty;
@@ -104,6 +128,9 @@ method start {
         #    }
         #}
         react {
+            whenever signal(SIGINT) {
+                done
+            }
             whenever $!done {
                 done
             }
@@ -137,27 +164,31 @@ method start {
                     my Msg  $m .= from-json: $news;
                     my News $n  = $m.news;
                     if not $!news{ $n }:exists and not $!old-news{ $n } {
-                        note "received: ", $n.WHICH;
+                        note "received: {$n.perl}";
                         $.add-news( $n );
                         emit $n
                     }
                 }
             }
-            whenever $!supply.grep: { .noun ~~ "node" } -> News $news {
+            whenever $!supply.grep: { .subject ~~ "node" } -> News $news {
                 #note "new news!!! {$news.perl}";
-                given $news.verb {
+                given $news.action {
                     when "add" {
-                        #note "adding node: {$news.params.perl}";
+                        note "adding node: {$news.params.perl}";
                         $.add-node(|$news.params)
                     }
                     when "remove" {
+                        $!node-lock.lock;
+                        note "nodes: {$!nodes.perl}";
+                        $!node-lock.unlock;
+                        note "remove: {$news.params<id>}";
                         $.remove-node(|$news.params)
                     }
                 }
             }
             whenever Supply.interval: $!interval / 1000, :delay(rand * $!interval / 1000) {
                 #note "interval";
-                with $!nodes.pick -> $node {
+                with $.pick-node -> $node {
                     #note "chosen node => {$node.perl}";
                     with $!news.pick -> News $news {
                         #note "chosen news => {$news.perl}";
@@ -171,19 +202,22 @@ method start {
         }
         LEAVE {
             note "quiting";
+            $!node-lock.lock;
             for $!nodes.keys -> $node {
+                note "sending remove '{$!address.id}' to $node";
                 my Msg $msg .= new:
                     :to($node),
                     :from($!address),
                     :news(
                         News.new:
-                            :verb<remove>,
-                            :noun<node>,
+                            :action<remove>,
+                            :subject<node>,
                             :params($!address.Hash)
                     )
                 ;
                 $node.send: $msg.to-json;
             }
+            $!node-lock.unlock;
         }
     }
 }
